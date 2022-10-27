@@ -47,9 +47,11 @@ func (tr *Transformer) matchExpr(x, y ast.Expr) bool {
 	xobj := isRef(x, tr.info)
 	yobj := isRef(y, tr.info)
 	if xobj != nil {
+		fmt.Fprintln(os.Stderr, "based on obj equality")
 		return xobj == yobj
 	}
 	if yobj != nil {
+		fmt.Fprintln(os.Stderr, "based on yobj not nil")
 		return false
 	}
 
@@ -82,8 +84,40 @@ func (tr *Transformer) matchExpr(x, y ast.Expr) bool {
 
 	case *ast.SelectorExpr:
 		y := y.(*ast.SelectorExpr)
-		return tr.matchSelectorExpr(x, y) &&
-			tr.info.Selections[x].Obj() == tr.info.Selections[y].Obj()
+		if !tr.matchSelectorExpr(x, y) {
+			return false
+		}
+		xObj := tr.info.Selections[x].Obj()
+		yObj := tr.info.Selections[y].Obj()
+		if xObj == yObj {
+			return true
+		}
+		xFunc, ok := xObj.(*types.Func)
+		if !ok {
+			return false
+		}
+		yFunc, ok := yObj.(*types.Func)
+		if !ok {
+			return false
+		}
+		if xFunc.Name() != yFunc.Name() {
+			return false
+		}
+		xRecv := xFunc.Type().(*types.Signature).Recv()
+		if xRecv == nil {
+			return false
+		}
+		xRecvType := xRecv.Type()
+		if xRecvType == nil {
+			return false
+		}
+		if underlying := xRecvType.Underlying(); underlying != nil {
+			xRecvType = underlying
+		}
+		if _, isInterface := xRecvType.(*types.Interface); isInterface {
+			return true
+		}
+		return false
 
 	case *ast.IndexExpr:
 		y := y.(*ast.IndexExpr)
